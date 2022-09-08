@@ -69,6 +69,7 @@ target_sources( BareCpper
     "include/BareCpper/ATsamd/MonotonicCounter_ATsamd5x.hpp"
     "include/BareCpper/ATsamd/Sercom_ATsamd5x.hpp"
     "include/BareCpper/ATsamd/Spi_ATsamd5x.hpp"
+    "include/BareCpper/ATsamd/SpiAsync_ATsamd5x.hpp"
     "include/BareCpper/ATsamd/Spi_SoftDevice.hpp"
     "include/BareCpper/ATsamd/Swi_SoftDevice.hpp"
     "include/BareCpper/ATsamd/TemperatureSensor_ATsamd5x.hpp"
@@ -96,10 +97,10 @@ target_sources( BareCpper
     "src/BareCpper/ATsamd/Dmac_ATsamd5x.cpp"
     "src/BareCpper/ATsamd/EventSystem_ATsamd5x.cpp"
     "src/BareCpper/ATsamd/ExternalInterruptController_ATsamd5x.cpp"
+    "src/BareCpper/ATsamd/Sercom_ATsamd5x.cpp"
     "src/BareCpper/ATsamd/TimerCounter_ATsamd5x.cpp"
     "src/BareCpper/ATsamd/TimerCounterControl_ATsamd5x.cpp"
     "src/BareCpper/ATsamd/TemperatureSensor_ATsamd5x.cpp"
-    "src/BareCpper/ATsamd/TwiAsync_ATsamd5x.cpp"
     "src/BareCpper/ATsamd/Watchdog_ATsamd5x.cpp"
 )
 
