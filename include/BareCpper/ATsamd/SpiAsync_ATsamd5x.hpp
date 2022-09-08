@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <array>      //< std::array
 #include <functional> //< std::function
-
-#include "Sercom_ATsamd5x.hpp"
+#include "../Gpio.hpp"
+#include "../Spi.hpp"
 
 #define CONF_SPIRXEN 0x1
 #define CONF_SPICHSIZE 0x0
@@ -29,6 +29,8 @@
 #endif
 namespace BareCpper
 {
+  inline std::function<void()> sercomTxCallbacks[SERCOM_INST_NUM];
+  inline std::function<void()> sercomRxCallbacks[SERCOM_INST_NUM];
   namespace SAMD51
   {
     template <
@@ -38,10 +40,10 @@ namespace BareCpper
       , typename CsPinT>
     struct SpiPins
     {
-      using mosiPin_t = MosiPinT;
-      using misoPin_t = MisoPinT;
-      using sckPin_t = SckPinT;
-      using csPin_t = CsPinT;
+      static constexpr MosiPinT mosi = {};
+      static constexpr MisoPinT miso = {};
+      static constexpr SckPinT sck = {};
+      static constexpr CsPinT cs = {};
     };
 
     template <uint8_t GclkId_CORE_Src, size_t GclkId_CORE_Freq, uint8_t GclkId_SLOW_Src, bool Use32BitExtension = false>
@@ -84,12 +86,13 @@ namespace BareCpper
               { return padIndex == 1; } //< SCK must always be PAD == 1
             });
         static_assert((bool)sercomIndex, "Pin combination {Mosi, Miso, Sck} must map to a valid SERCOM peripheral");
-        sercomIndex_ = sercomIndex; //< needed for calling correct callback function
+        sercomIndex_ = *sercomIndex; //< needed for calling correct callback function
         gpioFunction(pins.miso, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.miso));
         gpioFunction(pins.mosi, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.mosi));
         gpioFunction(pins.sck, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.sck));
 
         platformConfig_ = platformConfig;
+        pins_ = pins;
         return initialiseClock(*sercomIndex, platformConfig)
               && initialiseDevice(*sercomIndex, pins)
               && initialiseAsync(*sercomIndex)
@@ -156,7 +159,7 @@ namespace BareCpper
 
         if (message.txBuffer != nullptr)
         {
-          sercomTxCallbacks[sercomIndex_] = [this, message]()
+          BareCpper::sercomTxCallbacks[sercomIndex_] = [this, message]()
           {
             if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_TXC)
             {
@@ -172,7 +175,7 @@ namespace BareCpper
                 hw_->INTENCLR.reg |= SERCOM_SPI_INTENCLR_TXC;
                 if (!(hw_->INTENSET.reg & SERCOM_SPI_INTENSET_RXC))
                 {
-                  BareCpper::gpioOutHigh<Pins_t::csPin_t>();
+                  BareCpper::gpioOutHigh(pins_.cs);
                   disableAsync();
                   transferInProgress_ = false;
                 }
@@ -185,7 +188,7 @@ namespace BareCpper
 
         if (message.rxBuffer != nullptr)
         {
-          sercomRxCallbacks[sercomIndex_] = [this, message]()
+          BareCpper::sercomRxCallbacks[sercomIndex_] = [this, message]()
           {
             if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_RXC)
             {
@@ -202,7 +205,7 @@ namespace BareCpper
                 if (!(hw_->INTENSET.reg & SERCOM_SPI_INTENSET_TXC))
                 {
                   disableAsync();
-                  BareCpper::gpioOutHigh<Pins_t::csPin_t>();
+                  BareCpper::gpioOutHigh(pins_.cs);
                   transferInProgress_ = false;
                 }
               }
@@ -214,7 +217,7 @@ namespace BareCpper
         // enable SPI clock
         enableSync();
         // pull CS low
-        BareCpper::gpioOutLow<Pins_t::csPin_t>();
+        BareCpper::gpioOutLow(pins_.cs);
         transferInProgress_ = true;
         // send first data
         if(message.txBuffer != nullptr)
@@ -224,14 +227,14 @@ namespace BareCpper
         return 1;
       }
 
-      int32_t syncTransfer(const SpiMessage<DataType> &message)
+      int32_t syncTransfer(SpiMessage<DataType> &message)
       {
         if (transferInProgress_)
           return -1;
 
         volatile size_t iTxBuffer = 0, iRxBuffer = 0;
-        message.txCallback = [&iTxBuffer]() { ++iTxBuffer; }
-        message.rxCallback = [&iRxBuffer]() { ++iRxBuffer; }
+        message.txCallback = [&iTxBuffer]() { ++iTxBuffer; };
+        message.rxCallback = [&iRxBuffer]() { ++iRxBuffer; };
 
         if(asyncTransfer(message) < 0) return -1;
 
@@ -260,20 +263,18 @@ namespace BareCpper
 
       bool disableSync()
       {
-        hw_->CTRLA.bit.ENABLE = false;
-
-        return true;
-      }
-
-      bool enableSync()
-      {
-        // ScopeDebug dbg("spi_atsamd5::enableSync");
-
         // SERCOM_CRITICAL_SECTION_ENTER();
-        hw_->CTRLA.bit.ENABLE = true;
+        hw_->CTRLA.bit.ENABLE = false;
         while (hw_->SYNCBUSY.bit.SWRST | hw_->SYNCBUSY.bit.ENABLE)
           ;
         // SERCOM_CRITICAL_SECTION_LEAVE();
+        return true;
+      }
+
+      bool disableAsync()
+      {
+        hw_->CTRLA.bit.ENABLE = false;
+
         return true;
       }
 
@@ -373,18 +374,18 @@ namespace BareCpper
         NVIC_ClearPendingIRQ(rxcIrqn);
         NVIC_SetPriority(rxcIrqn, 1);
         NVIC_EnableIRQ(rxcIrqn);
+
+        return true;
       }
 
     private:
       SercomSpi *hw_ = nullptr;
       platformConfig_t platformConfig_;
+      Pins_t pins_;
       uint8_t sercomIndex_;
       bool transferInProgress_ = false;
     };
   }
-  inline std::function<void()> sercomTxCallbacks[SERCOM_INST_NUM];
-  inline std::function<void()> sercomRxCallbacks[SERCOM_INST_NUM];
-
 } // END: BareCpper
 
 #endif // SPI_ASYNC_ATSAMD5X_HPP
