@@ -63,7 +63,7 @@ namespace BareCpper
       size_t bufferLength;
       std::function<void()> txCallback;
       std::function<void()> rxCallback;
-    }
+    };
 
     template <typename Pins_t, typename PlatformConfig_t>
     class AsyncSpi
