@@ -381,8 +381,6 @@ namespace BareCpper
       uint8_t sercomIndex_;
       bool transferInProgress_ = false;
     };
-
-#endif
   }
   inline std::function<void()> sercomTxCallbacks[SERCOM_INST_NUM];
   inline std::function<void()> sercomRxCallbacks[SERCOM_INST_NUM];
