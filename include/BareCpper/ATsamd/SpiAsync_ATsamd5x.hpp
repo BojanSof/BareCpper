@@ -165,8 +165,6 @@ namespace BareCpper
           {
             if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_TXC)
             {
-              // call user callback
-              if(message.txCallback) message.txCallback();
               // if all bytes are transferred, disable TXC IRQ
               // check if RXC IRQ is disabled and stop SPI clock if that is the case
               ///@todo race condition on INTENSET_RXC
@@ -186,6 +184,8 @@ namespace BareCpper
                 // transfer new data, also clears TXC irq flag
                 hw_->DATA.reg = message.txBuffer[iTxBuffer++];
               }
+              // call user callback
+              if(message.txCallback) message.txCallback();
             }
           };
           // enable TXC IRQ
@@ -198,8 +198,6 @@ namespace BareCpper
           {
             if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_RXC)
             {
-              // call user callback
-              if(message.rxCallback) message.rxCallback();
               if (iRxBuffer < message.bufferLength)
               {
                 // read received data, also clears RXC irq flag
@@ -218,6 +216,8 @@ namespace BareCpper
                   transferInProgress_ = false;
                 }
               }
+              // call user callback
+              if(message.rxCallback) message.rxCallback();
             }
           };
           // enable RXC IRQ
