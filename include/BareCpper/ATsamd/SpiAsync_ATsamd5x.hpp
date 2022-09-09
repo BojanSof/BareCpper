@@ -29,8 +29,8 @@
 #endif
 namespace BareCpper
 {
-  inline std::function<void()> sercomTxCallbacks[SERCOM_INST_NUM];
-  inline std::function<void()> sercomRxCallbacks[SERCOM_INST_NUM];
+  extern std::function<void()> sercomTxCallbacks[SERCOM_INST_NUM];
+  extern std::function<void()> sercomRxCallbacks[SERCOM_INST_NUM];
   namespace SAMD51
   {
     template <
@@ -90,6 +90,8 @@ namespace BareCpper
         gpioFunction(pins.miso, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.miso));
         gpioFunction(pins.mosi, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.mosi));
         gpioFunction(pins.sck, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.sck));
+        gpioDirectionOut(pins.cs);
+        gpioOutHigh(pins.cs);
 
         platformConfig_ = platformConfig;
         pins_ = pins;
@@ -130,12 +132,12 @@ namespace BareCpper
 
       bool enable()
       {
-        return enableAsync();
+        return enableSync();
       }
 
       bool disable()
       {
-        return disableAsync();
+        return disableSync();
       }
 
       using DataType = std::conditional_t<PlatformConfig_t::use32BitExtension, uint32_t, uint8_t>;
@@ -164,9 +166,7 @@ namespace BareCpper
             if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_TXC)
             {
               // call user callback
-              message.txCallback();
-              // transfer new data, also clears TXC irq flag
-              hw_->DATA.reg = message.txBuffer[iTxBuffer++];
+              if(message.txCallback) message.txCallback();
               // if all bytes are transferred, disable TXC IRQ
               // check if RXC IRQ is disabled and stop SPI clock if that is the case
               ///@todo race condition on INTENSET_RXC
@@ -176,9 +176,15 @@ namespace BareCpper
                 if (!(hw_->INTENSET.reg & SERCOM_SPI_INTENSET_RXC))
                 {
                   BareCpper::gpioOutHigh(pins_.cs);
-                  disableAsync();
+                  disableSync();
                   transferInProgress_ = false;
                 }
+                hw_->INTFLAG.reg |= SERCOM_SPI_INTFLAG_TXC;
+              }
+              else
+              {
+                // transfer new data, also clears TXC irq flag
+                hw_->DATA.reg = message.txBuffer[iTxBuffer++];
               }
             }
           };
@@ -193,19 +199,22 @@ namespace BareCpper
             if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_RXC)
             {
               // call user callback
-              message.rxCallback();
-              // read received data, also clears RXC irq flag
-              message.rxBuffer[iRxBuffer++] = hw_->DATA.reg;
+              if(message.rxCallback) message.rxCallback();
+              if (iRxBuffer < message.bufferLength)
+              {
+                // read received data, also clears RXC irq flag
+                message.rxBuffer[iRxBuffer++] = hw_->DATA.reg;
+              }
               // if all bytes are received, disable RXC IRQ
               // check if TXC IRQ is disabled and stop SPI clock if that is the case
               ///@todo race condition on INTENSET_TXC
-              if (iRxBuffer == message.bufferLength)
+              else
               {
                 hw_->INTENCLR.reg |= SERCOM_SPI_INTENCLR_RXC;
                 if (!(hw_->INTENSET.reg & SERCOM_SPI_INTENSET_TXC))
                 {
-                  disableAsync();
                   BareCpper::gpioOutHigh(pins_.cs);
+                  disableSync();
                   transferInProgress_ = false;
                 }
               }
@@ -214,14 +223,16 @@ namespace BareCpper
           // enable RXC IRQ
           hw_->INTENSET.reg |= SERCOM_SPI_INTENSET_RXC;
         }
-        // enable SPI clock
-        enableSync();
         // pull CS low
         BareCpper::gpioOutLow(pins_.cs);
+        // enable SPI clock
+        enableSync();
         transferInProgress_ = true;
         // send first data
         if(message.txBuffer != nullptr)
         {
+          // wait for DRE to become set and send data
+          while(!hw_->INTFLAG.bit.DRE);
           hw_->DATA.reg = message.txBuffer[iTxBuffer++];
         }
         return 1;
@@ -238,7 +249,19 @@ namespace BareCpper
 
         if(asyncTransfer(message) < 0) return -1;
 
-        while((iTxBuffer < message.bufferLength) || (iRxBuffer < message.bufferLength));  //< wait for transfer to finish
+        if(message.txBuffer == nullptr)
+        {
+          while((iRxBuffer < message.bufferLength));
+        }
+        else if(message.rxBuffer == nullptr)
+        {
+          while((iTxBuffer < message.bufferLength));
+        }
+        else
+        {
+          while((iTxBuffer < message.bufferLength) || (iRxBuffer < message.bufferLength));  //< wait for transfer to finish          
+        }
+
         return 1;
       }
 

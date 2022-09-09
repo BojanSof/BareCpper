@@ -6,6 +6,12 @@
 #include "BareCpper/ATsamd/TwiAsync_ATsamd5x.hpp"
 #endif
 
+namespace BareCpper
+{
+  std::function<void()> sercomTxCallbacks[SERCOM_INST_NUM];
+  std::function<void()> sercomRxCallbacks[SERCOM_INST_NUM];
+}
+
 extern "C"
 {
   void SERCOM0_1_Handler()
