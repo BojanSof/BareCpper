@@ -87,18 +87,13 @@ namespace BareCpper
             });
         static_assert((bool)sercomIndex, "Pin combination {Mosi, Miso, Sck} must map to a valid SERCOM peripheral");
         sercomIndex_ = *sercomIndex; //< needed for calling correct callback function
-        gpioFunction(pins.miso, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.miso));
-        gpioFunction(pins.mosi, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.mosi));
-        gpioFunction(pins.sck, ATsamd5x::sercomPinPeripheral(*sercomIndex, pins.sck));
-        gpioDirectionOut(pins.cs);
-        gpioOutHigh(pins.cs);
 
         platformConfig_ = platformConfig;
         pins_ = pins;
         return initialiseClock(*sercomIndex, platformConfig)
+              && initialiseGpio()
               && initialiseDevice(*sercomIndex, pins)
               && initialiseAsync(*sercomIndex)
-            //&& initialiseGpio(platformConfig)
             ;
       }
 
@@ -223,10 +218,10 @@ namespace BareCpper
           // enable RXC IRQ
           hw_->INTENSET.reg |= SERCOM_SPI_INTENSET_RXC;
         }
-        // pull CS low
-        BareCpper::gpioOutLow(pins_.cs);
         // enable SPI clock
         enableSync();
+        // pull CS low
+        BareCpper::gpioOutLow(pins_.cs);
         transferInProgress_ = true;
         // send first data
         if(message.txBuffer != nullptr)
@@ -399,6 +394,27 @@ namespace BareCpper
         NVIC_ClearPendingIRQ(rxcIrqn);
         NVIC_SetPriority(rxcIrqn, 1);
         NVIC_EnableIRQ(rxcIrqn);
+
+        return true;
+      }
+
+      bool initialiseGpio()
+      {
+        gpioDirectionIn(pins_.miso);// Set pin direction to input
+        gpioPullDisable(pins_.miso);
+
+        gpioOutLow(pins_.sck); ///< Initial level
+        gpioDirectionOut(pins_.sck);// Set pin direction to output
+
+        gpioOutLow(pins_.mosi);
+        gpioDirectionOut(pins_.mosi); // Set pin direction to output
+
+        gpioDirectionOut(pins_.cs);
+        gpioOutHigh(pins_.cs);
+
+        gpioFunction(pins_.miso, ATsamd5x::sercomPinPeripheral(sercomIndex_, pins_.miso));
+        gpioFunction(pins_.mosi, ATsamd5x::sercomPinPeripheral(sercomIndex_, pins_.mosi));
+        gpioFunction(pins_.sck, ATsamd5x::sercomPinPeripheral(sercomIndex_, pins_.sck));
 
         return true;
       }
