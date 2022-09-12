@@ -265,8 +265,7 @@ namespace BareCpper
       {
         // SERCOM_CRITICAL_SECTION_ENTER();
         hw_->CTRLA.bit.ENABLE = true;
-        while (hw_->SYNCBUSY.bit.SWRST | hw_->SYNCBUSY.bit.ENABLE)
-          ;
+        while (hw_->SYNCBUSY.bit.ENABLE);
         // SERCOM_CRITICAL_SECTION_LEAVE();
         return true;
       }
@@ -283,8 +282,7 @@ namespace BareCpper
       {
         // SERCOM_CRITICAL_SECTION_ENTER();
         hw_->CTRLA.bit.ENABLE = false;
-        while (hw_->SYNCBUSY.bit.SWRST | hw_->SYNCBUSY.bit.ENABLE)
-          ;
+        while (hw_->SYNCBUSY.bit.ENABLE);
         // SERCOM_CRITICAL_SECTION_LEAVE();
         return true;
       }
