@@ -163,7 +163,7 @@ namespace BareCpper
         {
           BareCpper::sercomTxCallbacks[sercomIndex_] = [this, message]()
           {
-            if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_TXC)
+            if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_TXC) ///@todo: not needed, Handler is dedicated to TXC IRQ
             {
               // if all bytes are transferred, disable TXC IRQ
               // check if RXC IRQ is disabled and stop SPI clock if that is the case
@@ -171,13 +171,13 @@ namespace BareCpper
               if (iTxBuffer == message.bufferLength)
               {
                 hw_->INTENCLR.reg |= SERCOM_SPI_INTENCLR_TXC;
+                hw_->INTFLAG.reg |= SERCOM_SPI_INTFLAG_TXC;  //< clear TXC flag
                 if (!(hw_->INTENSET.reg & SERCOM_SPI_INTENSET_RXC))
                 {
                   BareCpper::gpioOutHigh(pins_.cs);
                   disableSync();
                   transferInProgress_ = false;
                 }
-                hw_->INTFLAG.reg |= SERCOM_SPI_INTFLAG_TXC;
               }
               else
               {
@@ -196,7 +196,7 @@ namespace BareCpper
         {
           BareCpper::sercomRxCallbacks[sercomIndex_] = [this, message]()
           {
-            if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_RXC)
+            if (hw_->INTFLAG.reg & SERCOM_SPI_INTFLAG_RXC)  ///@todo: not needed, Handler is dedicated to RXC IRQ
             {
               if (iRxBuffer < message.bufferLength)
               {
@@ -310,8 +310,7 @@ namespace BareCpper
         GCLK->PCHCTRL[params.gclkId_CORE].bit.CHEN = 0; // Disable timer
         GCLK->PCHCTRL[params.gclkId_SLOW].bit.CHEN = 0; // Disable timer
 
-        while (GCLK->PCHCTRL[params.gclkId_SLOW].bit.CHEN || GCLK->PCHCTRL[params.gclkId_CORE].bit.CHEN)
-          ; // Wait for disable
+        while (GCLK->PCHCTRL[params.gclkId_SLOW].bit.CHEN || GCLK->PCHCTRL[params.gclkId_CORE].bit.CHEN); // Wait for disable
 
         // GCLK_CRITICAL_SECTION_ENTER();
         GCLK->PCHCTRL[params.gclkId_CORE].reg = platformConfig.gclkId_CORE_Src | GCLK_PCHCTRL_CHEN;
@@ -322,8 +321,7 @@ namespace BareCpper
         ATsamd5x::sercomApbEnable(sercomIndex);
         // MCLK_CRITICAL_SECTION_LEAVE();
 
-        while (!GCLK->PCHCTRL[params.gclkId_CORE].bit.CHEN && !GCLK->PCHCTRL[params.gclkId_SLOW].bit.CHEN)
-          ; // Wait for clock enable
+        while (!GCLK->PCHCTRL[params.gclkId_CORE].bit.CHEN && !GCLK->PCHCTRL[params.gclkId_SLOW].bit.CHEN); // Wait for clock enable
 
         return true;
       }
@@ -340,15 +338,13 @@ namespace BareCpper
           if (hw_->CTRLA.bit.ENABLE) // Disable
           {
             hw_->CTRLA.bit.ENABLE = false;
-            while (hw_->SYNCBUSY.bit.ENABLE)
-              ;
+            while (hw_->SYNCBUSY.bit.ENABLE);
           }
 
           hw_->CTRLA.reg = SERCOM_SPI_CTRLA_SWRST | SERCOM_SPI_CTRLA_MODE_SPI_MASTER; // Master reset
         }
 
-        while (hw_->SYNCBUSY.bit.SWRST)
-          ; // Wait for reset
+        while (hw_->SYNCBUSY.bit.SWRST); // Wait for reset
 
         const uint8_t mosiPad = *ATsamd5x::sercomPinPad(sercomIndex, pins.mosi); //<@note We know the result shall be valid derefernece as this is checked via sercomForPins()
         const uint8_t misoPad = *ATsamd5x::sercomPinPad(sercomIndex, pins.miso);
@@ -368,11 +364,17 @@ namespace BareCpper
 
         // SERCOM_CRITICAL_SECTION_ENTER();
         const uint32_t ctrlA = SERCOM_SPI_CTRLA_MODE_SPI_MASTER
-                               /// @todo Slave SPI only:  | (CONF_SPIAMODE_EN ? SERCOM_SPI_CTRLA_FORM(2) : SERCOM_SPI_CTRLA_FORM(0))
-                               | SERCOM_SPI_CTRLA_DOPO(DOPO) | SERCOM_SPI_CTRLA_DIPO(DIPO) | (CONF_SPIIBON ? SERCOM_SPI_CTRLA_IBON : 0) | (CONF_SPIRUNSTDBY ? SERCOM_SPI_CTRLA_RUNSTDBY : 0);
-        const uint32_t ctrlB = ((CONF_SPIRXEN ? SERCOM_SPI_CTRLB_RXEN : 0) | (CONF_SPIMSSEN ? SERCOM_SPI_CTRLB_MSSEN : 0) | (CONF_SPISSDE ? SERCOM_SPI_CTRLB_SSDE : 0) | (CONF_SPIPLOADEN ? SERCOM_SPI_CTRLB_PLOADEN : 0)
-                                /// @todo Slave SPI only: | SERCOM_SPI_CTRLB_AMODE(CONF_SPIAMODE)
-                                | SERCOM_SPI_CTRLB_CHSIZE(CONF_SPICHSIZE));
+                              /// @todo Slave SPI only:  | (CONF_SPIAMODE_EN ? SERCOM_SPI_CTRLA_FORM(2) : SERCOM_SPI_CTRLA_FORM(0))
+                              | SERCOM_SPI_CTRLA_DOPO(DOPO)
+                              | SERCOM_SPI_CTRLA_DIPO(DIPO) 
+                              | (CONF_SPIIBON ? SERCOM_SPI_CTRLA_IBON : 0) 
+                              | (CONF_SPIRUNSTDBY ? SERCOM_SPI_CTRLA_RUNSTDBY : 0);
+        const uint32_t ctrlB = ((CONF_SPIRXEN ? SERCOM_SPI_CTRLB_RXEN : 0) 
+                              | (CONF_SPIMSSEN ? SERCOM_SPI_CTRLB_MSSEN : 0)
+                              | (CONF_SPISSDE ? SERCOM_SPI_CTRLB_SSDE : 0)
+                              | (CONF_SPIPLOADEN ? SERCOM_SPI_CTRLB_PLOADEN : 0)
+                              /// @todo Slave SPI only: | SERCOM_SPI_CTRLB_AMODE(CONF_SPIAMODE)
+                              | SERCOM_SPI_CTRLB_CHSIZE(CONF_SPICHSIZE));
 
         hw_->CTRLA.reg = ctrlA;
         hw_->CTRLB.reg = ctrlB;
